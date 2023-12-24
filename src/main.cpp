@@ -1,6 +1,14 @@
+/***   LED controller code
+ *  This will set an arbetrary string of addressable LED based on JSON recived as
+ *  MQTT messages
+ *  Format is led # followed HSV or RGB value
+ *  Alternative is array of tuples (Need to figure out how big of a message we can send)
+ *  NF 20231223
+*/
+
 #include <stdlib.h>
 #include <Arduino.h>
-//#include <PushButton.h>
+#include <PushButton.h>
 #include <MQTThandler.h>
 #include <FS.h>
 #include <SPIFFS.h>
@@ -10,17 +18,36 @@
 #include <WebServer.h>
 #include <WiFiManager.h> //https://github.com/tzapu/WiFiManager
 #include <ESPmDNS.h>
+#include <FastLED.h>
 
 #define DEBUG_ON 1
 byte debugMode = DEBUG_ON;
 
 #define DBG(...) debugMode == DEBUG_ON ? Serial.println(__VA_ARGS__) : NULL
+//Fast led stuff
+// used for testing LED Strip
+#define DATA_PIN 3
+#define CLOCK_PIN 13
+#define BTN_PIN 33
+
+#define NUM_LEDS 1
+#define LED_PERIOD 5
+
+// Define the array of leds
+CRGB leds[NUM_LEDS];
+// last timer update
+uint64_t LEDPastMils;
+
+// led hue parameter
+uint8_t Hue;
+
 #define PUBSUB_DELAY 200          // ms pubsub update rate
 #define ADD_TIME_BTN_DELAY 2000   // ms delay to count add time btn as "down"
 
 #define AP_DELAY 2000
 #define HARD_CODE_BROKER "192.168.1.150"
 #define CONFIG_FILE "/svr-config.json"
+uint64_t PubSub_timer;
 
 //********** Wifi and MQTT stuff below ******************************************************
 //******* based on Moxie board project  *****************************************************
@@ -118,7 +145,7 @@ void configModeCallback(WiFiManager *myWiFiManager)
   Serial.println(WiFi.softAPIP());
   // if you used auto generated SSID, print it
   Serial.println(myWiFiManager->getConfigPortalSSID());
-  digitalWrite(G_LIGHT, HIGH); // LED_BUILTIN is the horn !!
+  digitalWrite(LED_BUILTIN, HIGH);
   Use_def_IP_flag = true;
 }
 void saveConfigCallback()
@@ -231,7 +258,7 @@ void IOTsetup()
   tempint = End_A.cycleCount();
   String TempIP = MQTTIp.toString();
   // these lines set up the access point, mqtt & other internet stuff
-  pinMode(G_LIGHT, OUTPUT); // Initialize the Green for Wifi
+  pinMode(LED_BUILTIN, OUTPUT); // Initialize the Green for Wifi
   WiFiConf(Btnstate);
   // comment this out so we can enter broker IP on setup
   /*
@@ -267,6 +294,8 @@ void setup()
 
   Serial.begin(115200);
   IOTsetup();
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);  // GRB ordering is assumed
+  Hue = 0;
 
   
   Serial.println("program starting");
@@ -279,6 +308,17 @@ void setup()
 }
 
 void loop() {
+  // color cycle the led
+  if (millis() > LEDPastMils + LED_PERIOD)
+  {
+      if (Hue > 254)
+        Hue = 0;
+      for (int i=0; i > NUM_LEDS; i++)
+        leds[i] = CHSV(Hue++,255,127);
+      FastLED.show();
+      PastMils = millis();
+  }
+
   // Deal with MQTT Pubsub
   if ((millis() - PubSub_timer) > PUBSUB_DELAY)
   {
