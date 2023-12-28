@@ -24,8 +24,8 @@ class StripAnamations{
  public:
 	
 	// Constuctor need to pass the leds array in
-	StripAnamations(CRGB* ledArr);
-	CRGB* setSingleColorHSV(u_int8_t hue, u_int8_t satu, u_int8_t brt);
+	StripAnamations(CRGB* ledArr, uint32_t numleds);
+	void setSingleColorHSV(u_int8_t hue, u_int8_t satu, u_int8_t brt);
 
 
 };
