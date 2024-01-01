@@ -37,9 +37,12 @@ byte debugMode = DEBUG_ON;
 CRGB leds[NUM_LEDS];
 // last timer update
 uint64_t LEDPastMils;
+uint64_t PastMils;
 
 // led hue parameter
 uint8_t Hue;
+
+PushButton PB1(BTN_PIN);
 
 #define PUBSUB_DELAY 200          // ms pubsub update rate
 #define ADD_TIME_BTN_DELAY 2000   // ms delay to count add time btn as "down"
@@ -251,11 +254,11 @@ void IOTsetup()
   // Will wait 2 sec and check for reset to be held down / pressed
   while ((APmodeCKtimer + AP_DELAY) > millis())
   {
-    if (GameOver.isCycled())
+    if (PB1.isCycled())
       Btnstate = 1;
-    GameOver.update();
+    PB1.update();
   }
-  tempint = End_A.cycleCount();
+  tempint = PB1.cycleCount();
   String TempIP = MQTTIp.toString();
   // these lines set up the access point, mqtt & other internet stuff
   pinMode(LED_BUILTIN, OUTPUT); // Initialize the Green for Wifi
@@ -271,7 +274,7 @@ void IOTsetup()
   Serial.print("IP address of broker: ");
   Serial.println(MQTTIp.toString());
   MTQ.setServerIP(MQTTIp);
-  digitalWrite(G_LIGHT, LOW); // turn off the light if on from config
+  digitalWrite(LED_BUILTIN, LOW); // turn off the light if on from config
   // **********************************************************
 }
 

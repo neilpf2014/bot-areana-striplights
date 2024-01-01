@@ -1,11 +1,11 @@
-// 	StripAnamations.h
+// 	LedArray.h
 /*  FasLed strip anamation class
 *   NF 12-26-2023
 *   Container for all of the anamation related functions
 */
 
-#ifndef _STRIPANAMATIONS_h
-#define _STRIPANAMATIONS_h
+#ifndef _LEDARRAY_h
+#define _LEDARRAY_h
 
 #if defined(ARDUINO) && ARDUINO >= 100
 	#include "Arduino.h"
@@ -15,7 +15,7 @@
 #include <FastLED.h>
 #include <functional>
 
-class StripAnamations{
+class LedArray{
  protected:
     uint32_t striplen;
     CRGB* ledArray;
@@ -24,10 +24,10 @@ class StripAnamations{
  public:
 	
 	// Constuctor need to pass the leds array in
-	StripAnamations(CRGB* ledArr, uint32_t numleds);
-	void setSingleColorHSV(u_int8_t hue, u_int8_t satu, u_int8_t brt);
-
-
+	LedArray(CRGB* ledArr, uint32_t numleds);
+	void setAllSingleColorHSV(uint8_t hue, uint8_t satu, uint8_t brt);
+	uint32_t seBlockHSV(uint8_t hue, uint8_t satu, uint8_t brt, uint32_t startPos, uint32_t blocklen);
+	uint8_t HueCycle(u_int8_t hue);
 };
 
 
