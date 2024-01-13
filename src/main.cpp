@@ -19,22 +19,44 @@
 #include <WiFiManager.h> //https://github.com/tzapu/WiFiManager
 #include <ESPmDNS.h>
 #include <FastLED.h>
+#include <LedArray.h>
 
 #define DEBUG_ON 1
 byte debugMode = DEBUG_ON;
+#define Debug_LTS
 
 #define DBG(...) debugMode == DEBUG_ON ? Serial.println(__VA_ARGS__) : NULL
 //Fast led stuff
 // used for testing LED Strip
-#define DATA_PIN 3
-#define CLOCK_PIN 13
+#define DATA_PIN 13
+#define CLOCK_PIN 14
 #define BTN_PIN 33
 
-#define NUM_LEDS 1
-#define LED_PERIOD 5
+#define NUM_LEDS 150
+#define LED_PERIOD 200
 
 // Define the array of leds
 CRGB leds[NUM_LEDS];
+
+// object that manipulates led array
+LedArray ledEffects(leds,NUM_LEDS);
+
+//
+uint32_t effectCode;
+uint32_t lastEffect;
+uint32_t speed;
+uint32_t ledBlockStart;
+uint32_t ledBlocklen;
+
+
+
+// for dealing with data coming in from WS or other JSON source
+uint32_t JSStatusCode;
+uint32_t JSledIndex;
+uint8_t JSredVal;
+uint8_t JSGreenVal;
+uint8_t JSBlueVal;
+
 // last timer update
 uint64_t LEDPastMils;
 uint64_t PastMils;
@@ -51,6 +73,7 @@ PushButton PB1(BTN_PIN);
 #define HARD_CODE_BROKER "192.168.1.150"
 #define CONFIG_FILE "/svr-config.json"
 uint64_t PubSub_timer;
+uint64_t Btn_timer;
 
 //********** Wifi and MQTT stuff below ******************************************************
 //******* based on Moxie board project  *****************************************************
@@ -62,6 +85,7 @@ IPAddress MQTTIp(192, 168, 1, 140); // IP oF the MQTT broker if not 192.168.1.18
 WiFiClient espClient;
 uint64_t lastMsg = 0;
 unsigned long MessID;
+String Msgcontents;
 
 uint64_t msgPeriod = 10000; // Message check interval in ms (10 sec for testing)
 
@@ -277,7 +301,7 @@ void IOTsetup()
   digitalWrite(LED_BUILTIN, LOW); // turn off the light if on from config
   // **********************************************************
 }
-
+/*
 // Added to output to MQTT as JSON
 String MakeJson(uint32_t iMatchSCode, String SMatch, uint64_t SecRemain, uint32_t Mlen)
 {
@@ -291,6 +315,65 @@ String MakeJson(uint32_t iMatchSCode, String SMatch, uint64_t SecRemain, uint32_
   serializeJson(JM, sJSoutput);
   return sJSoutput;
 }
+*/
+// Generic handle incoming
+uint32_t MQTThandleIncoming(String MsgString)
+{
+  char CMD;
+  String s_latter_message_contents;
+
+  CMD = MsgString.charAt(0);
+  if (MsgString.length() > 1)
+  {
+    
+  }
+  return 0;
+}
+
+// simple json deserialize here, this let us set on item on the string.
+uint32_t DSIncomingJSON(String MsgString, uint32_t &ecode, uint32_t &startpos, uint32_t &blocklen, uint8_t &redVal, uint8_t &GrnVal, uint8_t &BlueVal)
+{
+  StaticJsonDocument<512> IJSON;
+  uint32_t RetVal = 3;
+  //String s_latter_message_contents;
+
+  uint32_t temp_ecode;
+  uint32_t temp_start;
+  uint32_t temp_len;
+  uint8_t temp_r;
+  uint8_t temp_g;
+  uint8_t temp_b;
+
+  if (MsgString.length() > 1)
+  {
+    DeserializationError er = deserializeJson(IJSON, MsgString);
+    if(er)
+      RetVal = 2; // deserialize error
+    else
+    {
+      temp_ecode = IJSON["EffectCode"].as<uint32_t>();
+      temp_start = IJSON["StartPos"].as<uint32_t>();
+      temp_len = IJSON["BlockLen"].as<uint32_t>();
+      //ledIndex = IJSON["LedIndex"].as<uint32_t>();
+      temp_r = IJSON["r"].as<uint8_t>();
+      temp_g = IJSON["g"].as<uint8_t>();
+      temp_b = IJSON["b"].as<uint8_t>();
+    } 
+    if (temp_ecode > 0)
+    {
+      ecode = temp_ecode;
+      startpos = temp_start;
+      blocklen = temp_len;
+      redVal = temp_r;
+      GrnVal = temp_g;
+      BlueVal = temp_b;
+      RetVal = 0;
+    }
+  }
+  else
+    RetVal = 1; // passed this an empty string
+  return RetVal;
+}
 
 void setup()
 {
@@ -299,12 +382,16 @@ void setup()
   IOTsetup();
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);  // GRB ordering is assumed
   Hue = 0;
+  speed = 500;
+  effectCode = 5;
+  lastEffect = effectCode;
 
   
   Serial.println("program starting");
   delay(1000);
+  LEDPastMils = millis();
   
-  gSDtimer = 0;
+  //gSDtimer = 0;
   
   Btn_timer = millis();
   PubSub_timer = millis();
@@ -312,38 +399,73 @@ void setup()
 
 void loop() {
   // color cycle the led
+  #ifdef Debug_LTS
   if (millis() > LEDPastMils + LED_PERIOD)
   {
-      if (Hue > 254)
-        Hue = 0;
-      for (int i=0; i > NUM_LEDS; i++)
-        leds[i] = CHSV(Hue++,255,127);
+      /*
+      for (int i=0; i<NUM_LEDS; i++)
+      {
+        Hue++;
+        leds[i] = CHSV(Hue,255,127);
+        if (Hue > 254)
+          Hue = 0;
+      }
+      */
+      Hue = ledEffects.HueCycle(Hue);
       FastLED.show();
-      PastMils = millis();
+      LEDPastMils = millis();
   }
+  #endif
+  #ifndef Debug_LTS
+  if (millis() > LEDPastMils + LED_PERIOD)
+  {
+      if(effectCode != lastEffect)
+      {
+        if (effectCode == 1)
+          ledEffects.AllOff();       
+        else
+        {
+          if (effectCode == 2)
+            ledEffects.setAllSingleColorRGB(JSredVal,JSGreenVal,JSBlueVal);
+          else
+            if(effectCode == 3)
+              ledEffects.seBlockRGB(JSredVal,JSGreenVal,JSBlueVal,ledBlockStart,ledBlocklen);
+        }
+      }
+      else
+      {
+        if(effectCode > 4)
+          Hue = ledEffects.HueCycle(Hue);
+      }
+      lastEffect = effectCode;
+      FastLED.show();
+      LEDPastMils = millis();
+  }
+  #endif
 
   // Deal with MQTT Pubsub
   if ((millis() - PubSub_timer) > PUBSUB_DELAY)
   {
-    // send / recieve status via MQTT
-    S_Match = MstateSetMQTT(g_match, g_Match_Reset, 0);
-    // Uncomment to send string the old way
-    // S_Stat_msg = String(millis()) + "," + String(g_match) + "," + S_Match + "," + String(MatchSecRemain) + "," + String(MATCH_LEN);
     // Send as JSON now
-    if (g_match != MatchState::starting)
-    {
-      S_Stat_msg = MakeJson(int(g_match), S_Match, MatchSecRemain, MATCH_LEN);
-      MQstatcode = MTQ.publish(S_Stat_msg);
-    }
+    // This is just going to set the entire strip to be red
 
     GotMail = MTQ.update();
     if (GotMail == true)
     {
       //*********Incoming Msg *****************************
-      Serial.print("message is: ");
+      //Serial.print("message is: ");
       Msgcontents = MTQ.GetMsg();
       Serial.println(Msgcontents);
-      MQTThandleIncoming(Msgcontents, ResetSec, g_match, g_Match_Reset);
+      JSStatusCode = DSIncomingJSON(Msgcontents,effectCode,ledBlockStart,ledBlocklen,JSredVal,JSGreenVal,JSBlueVal);
+      if (JSStatusCode != 0)
+      {
+        // Set LED from returned contents
+        Serial.println("JSON error");
+        effectCode = 5;
+        //leds[JSledIndex] = CRGB(JSredVal,JSGreenVal,JSBlueVal);
+        //FastLED.show();
+      }
+      //MQTThandleIncoming(Msgcontents);
       //********************************************************
       GotMail = false;
     }
