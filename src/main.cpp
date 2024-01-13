@@ -23,7 +23,7 @@
 
 #define DEBUG_ON 1
 byte debugMode = DEBUG_ON;
-#define Debug_LTS
+//#define Debug_LTS
 
 #define DBG(...) debugMode == DEBUG_ON ? Serial.println(__VA_ARGS__) : NULL
 //Fast led stuff
@@ -53,6 +53,7 @@ uint32_t ledBlocklen;
 // for dealing with data coming in from WS or other JSON source
 uint32_t JSStatusCode;
 uint32_t JSledIndex;
+uint32_t JSDelayMs;
 uint8_t JSredVal;
 uint8_t JSGreenVal;
 uint8_t JSBlueVal;
@@ -331,13 +332,14 @@ uint32_t MQTThandleIncoming(String MsgString)
 }
 
 // simple json deserialize here, this let us set on item on the string.
-uint32_t DSIncomingJSON(String MsgString, uint32_t &ecode, uint32_t &startpos, uint32_t &blocklen, uint8_t &redVal, uint8_t &GrnVal, uint8_t &BlueVal)
+uint32_t DSIncomingJSON(String MsgString, uint32_t &ecode, uint32_t &startpos, uint32_t &blocklen, uint32_t &speed, uint8_t &redVal, uint8_t &GrnVal, uint8_t &BlueVal)
 {
   StaticJsonDocument<512> IJSON;
-  uint32_t RetVal = 3;
+  uint32_t RetVal = 0;
   //String s_latter_message_contents;
 
   uint32_t temp_ecode;
+  uint32_t temp_speed;
   uint32_t temp_start;
   uint32_t temp_len;
   uint8_t temp_r;
@@ -354,6 +356,7 @@ uint32_t DSIncomingJSON(String MsgString, uint32_t &ecode, uint32_t &startpos, u
       temp_ecode = IJSON["EffectCode"].as<uint32_t>();
       temp_start = IJSON["StartPos"].as<uint32_t>();
       temp_len = IJSON["BlockLen"].as<uint32_t>();
+      temp_speed = IJSON["DelayMs"].as<uint32_t>();
       //ledIndex = IJSON["LedIndex"].as<uint32_t>();
       temp_r = IJSON["r"].as<uint8_t>();
       temp_g = IJSON["g"].as<uint8_t>();
@@ -361,17 +364,31 @@ uint32_t DSIncomingJSON(String MsgString, uint32_t &ecode, uint32_t &startpos, u
     } 
     if (temp_ecode > 0)
     {
-      ecode = temp_ecode;
-      startpos = temp_start;
-      blocklen = temp_len;
-      redVal = temp_r;
-      GrnVal = temp_g;
-      BlueVal = temp_b;
-      RetVal = 0;
+      if (ecode != temp_ecode)
+      { ecode = temp_ecode;
+        RetVal = 1;}
+      if(startpos != temp_start)
+        {startpos = temp_start;
+        RetVal = 1;}
+      if(blocklen != temp_len)
+        {blocklen = temp_len;
+        RetVal = 1;}
+      if(speed != temp_speed)
+      { speed = temp_speed;
+        RetVal = 1;}
+      if(redVal != temp_r)
+        {redVal = temp_r;
+        RetVal = 1;}
+      if(GrnVal != temp_g)
+        {GrnVal = temp_g;
+        RetVal = 1;}
+      if(BlueVal != temp_b)
+        {BlueVal = temp_b;
+        RetVal = 1;}
     }
   }
   else
-    RetVal = 1; // passed this an empty string
+    RetVal = 2; // passed this an empty string
   return RetVal;
 }
 
@@ -392,7 +409,7 @@ void setup()
   LEDPastMils = millis();
   
   //gSDtimer = 0;
-  
+  JSDelayMs = LED_PERIOD;
   Btn_timer = millis();
   PubSub_timer = millis();
 }
@@ -411,15 +428,15 @@ void loop() {
           Hue = 0;
       }
       */
-      Hue = ledEffects.HueCycle(Hue);
+      Hue = ledEffects.HueCycleSeq(Hue);
       FastLED.show();
       LEDPastMils = millis();
   }
   #endif
   #ifndef Debug_LTS
-  if (millis() > LEDPastMils + LED_PERIOD)
+  if (millis() > LEDPastMils + JSDelayMs)
   {
-      if(effectCode != lastEffect)
+      if(JSStatusCode == 1)
       {
         if (effectCode == 1)
           ledEffects.AllOff();       
@@ -435,9 +452,17 @@ void loop() {
       else
       {
         if(effectCode > 4)
-          Hue = ledEffects.HueCycle(Hue);
+          for(int i; i < NUM_LEDS; i++)
+          {
+              leds[i] = CHSV(Hue,245,127);
+              if (Hue < 255)
+                Hue++;
+              else
+                Hue = 0;
+              FastLED.show();
+          }
+          //Hue = ledEffects.HueCycleSeq(Hue);
       }
-      lastEffect = effectCode;
       FastLED.show();
       LEDPastMils = millis();
   }
@@ -456,8 +481,8 @@ void loop() {
       //Serial.print("message is: ");
       Msgcontents = MTQ.GetMsg();
       Serial.println(Msgcontents);
-      JSStatusCode = DSIncomingJSON(Msgcontents,effectCode,ledBlockStart,ledBlocklen,JSredVal,JSGreenVal,JSBlueVal);
-      if (JSStatusCode != 0)
+      JSStatusCode = DSIncomingJSON(Msgcontents,effectCode,ledBlockStart,ledBlocklen,JSDelayMs,JSredVal,JSGreenVal,JSBlueVal);
+      if (JSStatusCode > 1)
       {
         // Set LED from returned contents
         Serial.println("JSON error");

@@ -30,7 +30,11 @@ class LedArray{
 	void setAllSingleColorRGB(uint8_t r, uint8_t g, uint8_t b);
 	uint32_t seBlockHSV(uint8_t hue, uint8_t satu, uint8_t brt, uint32_t startPos, uint32_t blocklen);
 	uint32_t seBlockRGB(uint8_t r, uint8_t g, uint8_t b, uint32_t startPos, uint32_t blocklen);
+	// cycle all at once
 	uint8_t HueCycle(u_int8_t hue);
+	// cycle all at once
+	uint8_t HueCycleSeq(u_int8_t hue);
+	//Black
 	void AllOff(void);
 	void scroll(int dir);
 

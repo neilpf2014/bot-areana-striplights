@@ -87,7 +87,7 @@ uint32_t LedArray::seBlockRGB(uint8_t r, uint8_t g, uint8_t b, uint32_t startPos
         retVal = 1;
     return retVal;
 }
-
+// cycle all at once
 uint8_t LedArray::HueCycle(u_int8_t hue)
 {
     for(int i; i < striplen; i++)
@@ -100,7 +100,20 @@ uint8_t LedArray::HueCycle(u_int8_t hue)
         hue = 0;
     return hue;
 }
-
+// Rainbow strip
+uint8_t LedArray::HueCycleSeq(u_int8_t hue)
+{
+    for(int i; i < striplen; i++)
+    {
+        ledArray[i] = CHSV(hue,245,127);
+        if (hue < 255)
+            hue++;
+        else
+            hue = 0;
+    }
+    return hue;
+}
+//Black
 void LedArray::AllOff(void)
 {
     for(int x=0;x<striplen;x++)
